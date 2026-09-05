@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voice Converter V1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-title">
+    <span class="topbar-mark">●</span>
+    <h1>Voice Converter</h1>
+    <span class="topbar-sub">Text → voice audio</span>
+  </div>
+  <div class="topbar-progress" id="overallProgress">
+    <span id="progressText">0 / 0 dòng</span>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar">
+
+    <section class="panel">
+      <h2>API key</h2>
+      <p class="hint">
+        Mỗi dòng 1 key.
+      </p>
+      <div class="input-actions" style="margin:0 0 10px">
+        <label class="btn btn-ghost file-btn" style="flex:1; justify-content:center;">
+          Nạp key từ file .env
+          <input type="file" id="envFileInput" accept=".env,.txt" hidden />
+        </label>
+          <br>
+          <span>hoặc nhập key xuống bên dưới</span>
+          <br>
+      </div>
+      <textarea id="apiKeysInput" rows="4" placeholder="AIzaSy...&#10;AIzaSy...&#10;AIzaSy..."></textarea>
+      <div id="keyStatusList" class="key-status-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Giọng đọc</h2>
+      <label class="field">
+        <span>Model</span>
+        <select id="modelSelect"></select>
+      </label>
+      <label class="field">
+        <span>Giọng</span>
+        <select id="voiceSelect"></select>
+      </label>
+      <label class="field">
+        <span>Audio profile</span>
+        <select id="audioProfileSelect"></select>
+      </label>
+    </section>
+
+    <section class="panel">
+      <h2>Ghi chú đạo diễn</h2>
+      <label class="field">
+        <span>Tông giọng</span>
+        <select id="directorStyleSelect"></select>
+      </label>
+      <label class="field">
+        <span>Tốc độ</span>
+        <select id="directorPaceSelect"></select>
+      </label>
+      <label class="field">
+        <span>Ngữ giọng</span>
+        <select id="directorAccentSelect"></select>
+      </label>
+      <label class="field">
+        <span>Ghi chú thêm (tuỳ chọn)</span>
+        <textarea id="directorCustomInput" rows="2" placeholder="Ví dụ: nhấn mạnh câu cuối, ngắt hơi ở dấu phẩy..."></textarea>
+      </label>
+    </section>
+
+    <section class="panel">
+      <h2>Xuất file &amp; tốc độ gửi</h2>
+      <label class="field">
+        <span>Định dạng xuất</span>
+        <select id="formatSelect"></select>
+      </label>
+      <div id="ffmpegNotice" class="hint hint-warn" hidden>
+        ffmpeg.wasm chưa được nạp — file sẽ giữ WAV. Xem README.md để bật MP3/OGG.
+      </div>
+      <label class="field">
+        <span>Độ trễ giữa các dòng (ms)</span>
+        <input type="number" id="betweenRequestsMs" min="0" step="100" />
+      </label>
+      <label class="field">
+        <span>Độ trễ khi bị giới hạn (ms)</span>
+        <input type="number" id="rateLimitCooldownMs" min="0" step="500" />
+      </label>
+      <label class="field">
+        <span>Số lần thử lại tối đa / dòng</span>
+        <input type="number" id="maxRetriesPerLine" min="1" step="1" />
+      </label>
+    </section>
+
+  </aside>
+
+  <!-- ===================== MAIN: INPUT + QUEUE ===================== -->
+  <main class="main">
+
+    <section class="panel input-panel">
+      <h2>Nội dung</h2>
+      <textarea id="textInput" rows="5" placeholder="Dán văn bản ở đây — mỗi dòng sẽ thành một file giọng nói riêng."></textarea>
+      <div class="input-actions">
+        <label class="btn btn-ghost file-btn">
+          Chọn file .txt
+          <input type="file" id="fileInput" accept=".txt" hidden />
+        </label>
+        <button class="btn btn-ghost" id="clearBtn">Xoá nội dung</button>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost" id="stopBtn">Dừng</button>
+        <button class="btn btn-secondary" id="runAllBtn">Chạy tất cả</button>
+        <button class="btn btn-primary" id="rerunAllBtn">Chạy lại toàn bộ</button>
+      </div>
+    </section>
+
+    <section class="panel queue-panel">
+      <h2>Hàng đợi</h2>
+      <div class="queue-empty" id="queueEmpty">Chưa có dòng nào. Dán text hoặc chọn file ở trên.</div>
+      <div class="queue-list" id="queueList"></div>
+    </section>
+
+  </main>
+
+</div>
+
+<!-- ===================== TRANSPORT BAR (PLAYER) ===================== -->
+<footer class="transport">
+  <button class="transport-btn" id="prevBtn" title="Bài trước" aria-label="Bài trước">⏮</button>
+  <button class="transport-btn transport-btn-main" id="playPauseBtn" title="Phát/Tạm dừng" aria-label="Phát/Tạm dừng">▶</button>
+  <button class="transport-btn" id="nextBtn" title="Bài sau" aria-label="Bài sau">⏭</button>
+
+  <div class="transport-track-info">
+    <span id="nowPlayingLabel">Chưa phát bài nào</span>
+  </div>
+
+  <span class="transport-time" id="currentTimeLabel">0:00</span>
+  <input type="range" id="seekBar" class="seek-bar" min="0" max="1000" value="0" />
+  <span class="transport-time" id="durationLabel">0:00</span>
+
+  <label class="autoplay-toggle">
+    <input type="checkbox" id="autoplayToggle" checked />
+    <span>Tự động phát tiếp</span>
+  </label>
+</footer>
+
+<audio id="audioEl" preload="auto"></audio>
+
+<script src="js/voices.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/wav.js"></script>
+<script src="js/keyManager.js"></script>
+<script src="js/envLoader.js"></script>
+<script src="js/ttsClient.js"></script>
+ <script src="lib/ffmpeg/ffmpeg.min.js"></script>
+<script src="js/ffmpegConvert.js"></script>
+<script src="js/queue.js"></script>
+<script src="js/player.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
