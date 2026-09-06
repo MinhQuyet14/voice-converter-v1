@@ -37,7 +37,6 @@ class Player {
 
   togglePlayPause() {
     if (!this.audio.src) {
-      // Chưa chọn bài nào -> phát bài "done" đầu tiên
       const doneIdx = this._doneIndices();
       if (doneIdx.length) this.playIndex(doneIdx[0]);
       return;
